@@ -11,7 +11,11 @@
  * Restrictions/Limitations : none
  *
  * Change Descriptions :
- *
+ * 
+ * 03-Jan-24 CBL Added in a TMultigraph and multiple TGraphs to 
+ *               be able to modify the marker and color for each 
+ *               dataset day. This is on a switch. 
+ * 
  * Classification : Unclassified
  *
  * References :
@@ -27,6 +31,8 @@
 class TFile;
 class SFilter;
 class TGraph;
+class TMultiGraph;
+class TLegend;
 
 class Analysis : public CObject
 {
@@ -42,7 +48,7 @@ public:
     Analysis(const char *ConfigFile);
 
     /**
-     * Destructor for SK8. 
+     * Destructor
      */
     ~Analysis(void);
 
@@ -74,8 +80,10 @@ public:
 private:
 
     /// CERN Root stuff.
-    TFile  *fRootFile;
-    TGraph *fGraph;
+    TFile       *fRootFile;
+    TGraph      *fGraph;
+    TMultiGraph *ftmg;        // if this is non-null, use multiple graphs
+    TLegend     *fLegend;     
 
     /// File management
     ifstream     *fInputFileList;

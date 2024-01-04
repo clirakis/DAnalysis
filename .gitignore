@@ -33,3 +33,8 @@
 
 # CERN root data files
 *.root
+
+# ignore the log files produced
+*.log
+
+

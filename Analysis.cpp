@@ -32,6 +32,9 @@ using namespace libconfig;
 #include <TROOT.h>
 #include <TFile.h>
 #include <TGraph.h>
+#include <TMultiGraph.h>
+#include <TLegend.h>
+#include <TString.h>
 #include <TObjString.h>
 
 /// Local Includes.
@@ -78,7 +81,8 @@ Analysis::Analysis(const char* ConfigFile) : CObject()
     fInputFileName = strdup("Default.txt");
     fRootFile      = NULL;
     fFilter        = NULL;
-
+    ftmg           = NULL;
+    fLegend        = NULL;
 
     if(!ConfigFile)
     {
@@ -144,8 +148,19 @@ Analysis::~Analysis(void)
     /* Clean up */
     delete f5InputFile;
     f5InputFile = NULL;
+    if (ftmg)
+    {
+	ftmg->Write("IMUData");
+    }
+    else
+    {
+	fGraph->Write("IMUData");     // flush this. 
+    }
+    if (fLegend)
+    {
+	fLegend->Write("IMULegend");
+    }
 
-    fGraph->Write("IMUData");     // flush this. 
     /* close root file. */
     fRootFile->Write();
     fRootFile->Close();
@@ -185,7 +200,7 @@ bool Analysis::OpenOutputFile(const char *Filename)
 {
     SET_DEBUG_STACK;
     CLogger *Logger = CLogger::GetThis();
-    bool rc = false;
+    bool     rc     = true;
 
     /*
      * Initialize Root package.
@@ -198,10 +213,6 @@ bool Analysis::OpenOutputFile(const char *Filename)
     fRootFile = new TFile( Filename, "RECREATE","generic data analysis");
     fRootFile->cd();
     Logger->LogTime(" Output file %s opened.\n", Filename);
-
-    // create the data entries. 
-    fGraph = new TGraph();
-    fGraph->SetTitle(Filename);
 
     SET_DEBUG_STACK;
     return rc;
@@ -230,10 +241,20 @@ bool Analysis::OpenOutputFile(const char *Filename)
 void Analysis::Do(void)
 {
     SET_DEBUG_STACK;
-    char Filename[256];
+    char     Filename[256];
+    TString  Name, Result;        // stripped down name
     uint32_t count = 0;
+    Ssiz_t   n1, n2;
 
     fRun = true;
+
+    // Create initial TGraph for the data
+    fGraph = new TGraph();
+    fGraph->SetTitle("IMU Data");
+    if (ftmg)
+    {
+	fLegend = new TLegend(0.1, 0.1, 0.5, 0.4);
+    }
 
     // Loop over input file name until there are no more. 
     while(fRun)
@@ -244,6 +265,11 @@ void Analysis::Do(void)
 	fRun = (strlen(Filename)>0);
 	if (fRun)
 	{
+	    Name   = Filename;
+	    n1     = Name.First("202");
+	    n2     = Name.First("h5") - 1;
+	    Result = Name(n1,n2-n1);
+
 	    // Process. 
 	    if(OpenInputFile(Filename))
 	    {
@@ -251,6 +277,16 @@ void Analysis::Do(void)
 		ProcessData();
 		delete f5InputFile;
 		f5InputFile = NULL;
+		if (ftmg)
+		{
+		    fGraph->SetTitle(Result);
+		    ftmg->Add(fGraph); 
+		    fLegend->AddEntry(fGraph, Result);
+		    // Create a new graph
+		    fGraph = new TGraph();
+		    fGraph->SetMarkerColor(count);
+		    fGraph->SetLineColor(count);
+		}
 	    }
 	}
     }
@@ -383,6 +419,7 @@ bool Analysis::ReadConfiguration(void)
     Config *pCFG = new Config();
     string InputFile;
     double CutoffFrequency, SampleRate;
+    bool   multi  = false;
 
     /*
      * Open the configuragtion file. 
@@ -423,6 +460,8 @@ bool Analysis::ReadConfiguration(void)
 	MM.lookupValue("CutoffFrequncy", CutoffFrequency);
 	MM.lookupValue("SampleRate"    , SampleRate);
 	MM.lookupValue("OutputFile"    , fOutputFileName);
+	MM.lookupValue("Multigraph"    , multi);
+
 	SetDebug(Debug);
 	if (InputFile.length()>0)
 	{
@@ -465,6 +504,11 @@ bool Analysis::ReadConfiguration(void)
 		CutoffFrequency, SampleRate);
     fFilter = new SFilter(CutoffFrequency, SampleRate);
     OpenOutputFile(fOutputFileName.data());
+
+    if (multi)
+    {
+	ftmg = new TMultiGraph();
+    }
 
     SET_DEBUG_STACK;
     return true;
@@ -514,7 +558,7 @@ bool Analysis::WriteConfiguration(void)
     MM.add("CutoffFrequncy" , Setting::TypeFloat)  = CutoffFrequency;
     MM.add("SampleFrequency", Setting::TypeFloat)  = SampleRate;
     MM.add("OutputFile"     , Setting::TypeString) = fOutputFileName;
-
+    MM.add("Multigraph"     , Setting::TypeBoolean)= (ftmg != NULL);
 
     // Write out the new configuration.
     try

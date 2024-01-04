@@ -30,4 +30,6 @@
     hbs->SetYTitle("Total Field (uT)");
     hbs->SetLabelSize(0.03,"X");
     hbs->SetLabelSize(0.03,"Y");
+
+    IMULegend->Draw();
 }
