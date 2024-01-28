@@ -37,4 +37,7 @@
 # ignore the log files produced
 *.log
 
-
+# ignore photos
+*.png
+*.jpg
+*.gif
