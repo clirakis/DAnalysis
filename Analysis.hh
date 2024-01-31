@@ -15,6 +15,8 @@
  * 03-Jan-24 CBL Added in a TMultigraph and multiple TGraphs to 
  *               be able to modify the marker and color for each 
  *               dataset day. This is on a switch. 
+ *
+ * 28-Jan-24     Create Ntuple too
  * 
  * Classification : Unclassified
  *
@@ -33,6 +35,8 @@ class SFilter;
 class TGraph;
 class TMultiGraph;
 class TLegend;
+class TNtupleD;
+class TProfile;
 
 class Analysis : public CObject
 {
@@ -82,8 +86,10 @@ private:
     /// CERN Root stuff.
     TFile       *fRootFile;
     TGraph      *fGraph;
+    TProfile    *fProfile;
     TMultiGraph *ftmg;        // if this is non-null, use multiple graphs
-    TLegend     *fLegend;     
+    TLegend     *fLegend;   
+    TNtupleD    *fNtuple;   
 
     /// File management
     ifstream     *fInputFileList;
@@ -115,6 +121,8 @@ private:
     bool OpenInputFile(const char *filename);
 
     bool OpenOutputFile(const char *Filename);
+
+    bool CreateNTuple(void);
 
     /*!
      * Read the configuration file. 

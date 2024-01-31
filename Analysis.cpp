@@ -10,6 +10,7 @@
  * Restrictions/Limitations : none
  *
  * Change Descriptions : 
+ * 28-Jan-24   CBL Might as well create the NTuple as well. 
  *
  * Classification : Unclassified
  *
@@ -36,6 +37,8 @@ using namespace libconfig;
 #include <TLegend.h>
 #include <TString.h>
 #include <TObjString.h>
+#include <TNtupleD.h>
+#include <TProfile.h>
 
 /// Local Includes.
 #include "Analysis.hh"
@@ -83,6 +86,9 @@ Analysis::Analysis(const char* ConfigFile) : CObject()
     fFilter        = NULL;
     ftmg           = NULL;
     fLegend        = NULL;
+    fNtuple        = NULL;
+    fGraph         = NULL;
+    fProfile       = NULL;
 
     if(!ConfigFile)
     {
@@ -156,16 +162,16 @@ Analysis::~Analysis(void)
     {
 	fGraph->Write("IMUData");     // flush this. 
     }
-    if (fLegend)
-    {
-	fLegend->Write("IMULegend");
-    }
+    fLegend->Write("IMULegend");
+
 
     /* close root file. */
     fRootFile->Write();
     fRootFile->Close();
     delete fRootFile;
     fRootFile = NULL;
+
+    delete fNtuple;
 
     delete fFilter;
 
@@ -214,8 +220,40 @@ bool Analysis::OpenOutputFile(const char *Filename)
     fRootFile->cd();
     Logger->LogTime(" Output file %s opened.\n", Filename);
 
+    CreateNTuple();
+
     SET_DEBUG_STACK;
     return rc;
+}
+/**
+ ******************************************************************
+ *
+ * Function Name : CreateNTuple
+ *
+ * Description : 
+ *     create an NTuple in the TFile
+ *
+ * Inputs :
+ *
+ * Returns :
+ *
+ * Error Conditions :
+ * 
+ * Unit Tested on: 
+ *
+ * Unit Tested by: CBL
+ *
+ *
+ *******************************************************************
+ */
+bool Analysis::CreateNTuple(void)
+{
+    SET_DEBUG_STACK;
+    const char *Names="Time:AX:AY:AZ:GX:GY:GZ:MX:MY:MZ:Temp:Lat:Lon:Z:UTC";
+    fNtuple = new TNtupleD("IMUTuple", "Raspberry Pi DA", Names);
+
+    SET_DEBUG_STACK;
+    return true;
 }
 
 /**
@@ -242,7 +280,8 @@ void Analysis::Do(void)
 {
     SET_DEBUG_STACK;
     char     Filename[256];
-    TString  Name, Result;        // stripped down name
+    TString  Name, Result, ProfName;        // stripped down name
+    char     tmp[32];
     uint32_t count = 0;
     Ssiz_t   n1, n2;
 
@@ -251,10 +290,11 @@ void Analysis::Do(void)
     // Create initial TGraph for the data
     fGraph = new TGraph();
     fGraph->SetTitle("IMU Data");
-    if (ftmg)
-    {
-	fLegend = new TLegend(0.1, 0.1, 0.5, 0.4);
-    }
+
+    fProfile = new TProfile("ABSMAG", "Absolute Magnitude", 
+			    215, 0.0, 86000.0, 80.0, 90.0);
+
+    fLegend = new TLegend(0.1, 0.1, 0.5, 0.4);
 
     // Loop over input file name until there are no more. 
     while(fRun)
@@ -267,8 +307,12 @@ void Analysis::Do(void)
 	{
 	    Name   = Filename;
 	    n1     = Name.First("202");
-	    n2     = Name.First("h5") - 1;
+	    n2     = Name.Last('_');
 	    Result = Name(n1,n2-n1);
+	    snprintf(tmp, sizeof(tmp), "IMU%d",count);
+	    ProfName = tmp;
+	    fProfile->SetTitle(Result);
+	    cout << "RESULT: " << Result << endl;
 
 	    // Process. 
 	    if(OpenInputFile(Filename))
@@ -287,6 +331,8 @@ void Analysis::Do(void)
 		    fGraph->SetMarkerColor(count);
 		    fGraph->SetLineColor(count);
 		}
+		fProfile->Write(ProfName);
+		fProfile->Reset();
 	    }
 	}
     }
@@ -295,13 +341,13 @@ void Analysis::Do(void)
 /**
  ******************************************************************
  *
- * Function Name : Do
+ * Function Name : ProcessData
  *
- * Description :
+ * Description : for each file, process the data. 
  *
- * Inputs :
+ * Inputs : NONE
  *
- * Returns :
+ * Returns : NONE
  *
  * Error Conditions :
  * 
@@ -315,9 +361,11 @@ void Analysis::Do(void)
 bool Analysis::ProcessData(void)
 {
     SET_DEBUG_STACK;
-    const double   *var;
-    double   MTotal, FVal;
-    double   T, X, Y, Z;
+    const double   *var;        // get a row at a time from H5 file
+    double   varcpy[15];
+    double         MTotal, FVal;
+    double         T, X, Y, Z;
+
     // number of entries in the file. 
     size_t N = f5InputFile->NEntries();
     cout << "Processing: " << N << " Entries." << endl;
@@ -340,6 +388,11 @@ bool Analysis::ProcessData(void)
 	    MTotal = sqrt(X*X + Y*Y + Z*Z);
 	    FVal   = fFilter->Filter(MTotal);
 	    fGraph->AddPoint(T, FVal);
+	    fProfile->Fill(T,MTotal);
+	    memcpy(varcpy, var, 15*sizeof(double));
+	    // convert UTC HHMMSS.ss into sssss
+	    varcpy[14] = UTC2Sec(var[14]);
+	    if (fNtuple) fNtuple->Fill(varcpy);
 	}
     }
 
