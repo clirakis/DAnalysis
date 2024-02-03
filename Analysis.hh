@@ -37,6 +37,7 @@ class TMultiGraph;
 class TLegend;
 class TNtupleD;
 class TProfile;
+class TH2D;
 
 class Analysis : public CObject
 {
@@ -83,6 +84,10 @@ public:
  
 private:
 
+    // Number of time bins
+    const   uint32_t kSecPerDay = 86400;
+    const   uint32_t kNTimeBin  = 288;
+
     /// CERN Root stuff.
     TFile       *fRootFile;
     TGraph      *fGraph;
@@ -90,6 +95,7 @@ private:
     TMultiGraph *ftmg;        // if this is non-null, use multiple graphs
     TLegend     *fLegend;   
     TNtupleD    *fNtuple;   
+    TH2D        *f2D;         // Binned 2 D data. 
 
     /// File management
     ifstream     *fInputFileList;
@@ -124,6 +130,8 @@ private:
 
     bool CreateNTuple(void);
 
+    uint32_t CountFiles(void);
+
     /*!
      * Read the configuration file. 
      */
@@ -133,7 +141,7 @@ private:
      */
     bool WriteConfiguration(void);
 
-    bool ProcessData(void);
+    bool ProcessData(uint32_t count);
 
     /*! The static 'this' pointer. */
     static Analysis *fAnalysis;

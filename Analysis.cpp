@@ -39,6 +39,7 @@ using namespace libconfig;
 #include <TObjString.h>
 #include <TNtupleD.h>
 #include <TProfile.h>
+#include <TH2D.h>
 
 /// Local Includes.
 #include "Analysis.hh"
@@ -48,7 +49,7 @@ using namespace libconfig;
 #include "debug.h"
 #include "SFilter.hh"
 
-Analysis* Analysis::fAnalysis;
+Analysis* Analysis::fAnalysis = NULL;
 
 /**
  ******************************************************************
@@ -89,6 +90,7 @@ Analysis::Analysis(const char* ConfigFile) : CObject()
     fNtuple        = NULL;
     fGraph         = NULL;
     fProfile       = NULL;
+    f2D            = NULL;
 
     if(!ConfigFile)
     {
@@ -171,8 +173,6 @@ Analysis::~Analysis(void)
     delete fRootFile;
     fRootFile = NULL;
 
-    delete fNtuple;
-
     delete fFilter;
 
     // Make sure all file streams are closed
@@ -252,6 +252,17 @@ bool Analysis::CreateNTuple(void)
     const char *Names="Time:AX:AY:AZ:GX:GY:GZ:MX:MY:MZ:Temp:Lat:Lon:Z:UTC:JD";
     fNtuple = new TNtupleD("IMUTuple", "Raspberry Pi DA", Names);
 
+    /*
+     *  Create 2D plot as well. 
+     * First count number of files. Axes will be 
+     * Day and time, fill with the absmag of the value per bin
+     * and then normalize. 
+     */
+    uint32_t count = CountFiles();
+    f2D = new TH2D("ABSMAG2D","Day by Day ABSMAG", 
+		   count, 0.0, (Double_t) count-1,   // Day is X
+		   kNTimeBin, 0.0, (double) kSecPerDay);         // Time is Y
+
     SET_DEBUG_STACK;
     return true;
 }
@@ -282,7 +293,7 @@ void Analysis::Do(void)
     char     Filename[256];
     TString  Name, Result, ProfName;        // stripped down name
     char     tmp[32];
-    uint32_t count = 0;
+    uint32_t count = 0;                     // file count
     Ssiz_t   n1, n2;
 
     fRun = true;
@@ -292,7 +303,7 @@ void Analysis::Do(void)
     fGraph->SetTitle("IMU Data");
 
     fProfile = new TProfile("ABSMAG", "Absolute Magnitude", 
-			    215, 0.0, 86000.0, 80.0, 90.0);
+			    kNTimeBin, 0.0, (double)kSecPerDay, 80.0, 90.0);
 
     fLegend = new TLegend(0.1, 0.1, 0.5, 0.4);
 
@@ -301,7 +312,6 @@ void Analysis::Do(void)
     {
 	fInputFileList->getline( Filename, sizeof(Filename),'\n');
 	cout << "Input file name: " << Filename << " count: " << count << endl;
-	count++;
 	fRun = (strlen(Filename)>0);
 	if (fRun)
 	{
@@ -318,7 +328,7 @@ void Analysis::Do(void)
 	    if(OpenInputFile(Filename))
 	    {
 		// Loop over data, process it and then close the input file. 
-		ProcessData();
+		ProcessData(count);
 		delete f5InputFile;
 		f5InputFile = NULL;
 		if (ftmg)
@@ -334,6 +344,7 @@ void Analysis::Do(void)
 		fProfile->Write(ProfName);
 		fProfile->Reset();
 	    }
+	    count++;
 	}
     }
     SET_DEBUG_STACK;
@@ -345,7 +356,7 @@ void Analysis::Do(void)
  *
  * Description : for each file, process the data. 
  *
- * Inputs : NONE
+ * Inputs : count - file number currently being processed. 
  *
  * Returns : NONE
  *
@@ -358,25 +369,36 @@ void Analysis::Do(void)
  *
  *******************************************************************
  */
-bool Analysis::ProcessData(void)
+bool Analysis::ProcessData(uint32_t count)
 {
     SET_DEBUG_STACK;
     const double   *var;        // get a row at a time from H5 file
-    double   varcpy[16];
+    double         varcpy[16];
     double         MTotal, FVal;
     double         T, X, Y, Z;
     struct tm      *tmnow;
     time_t         sec;
+    // This assumes a 1/sec sample rate. 
+    double         Norm = ((double)kSecPerDay)/((double) kNTimeBin);
+    double         Day  = (double) count;
+    double         W;   // Actual bin value
+    const double   Low1 = 16.0*kSecPerDay;
+    const double   Low2 = 17.0*kSecPerDay;
+
+
+    // Sample at 2 points for printout/debug
+    double         Sum[2];
 
     // number of entries in the file. 
     size_t N = f5InputFile->NEntries();
-    cout << "Processing: " << N << " Entries." << endl;
+    cout << "Processing: " << N << " Entries. Day: " << Day << endl;
 
     time_t   iTime = f5InputFile->IndexFromName("Time");
     int32_t  iUTC  = f5InputFile->IndexFromName("UTC");
     uint32_t iMx   = f5InputFile->IndexFromName("Mx");
     uint32_t iMy   = f5InputFile->IndexFromName("My");
     uint32_t iMz   = f5InputFile->IndexFromName("Mz");
+    memset (Sum, 0, 2*sizeof(double));
 
     for (size_t i=0 ;i<N; i++)
     {
@@ -398,8 +420,23 @@ bool Analysis::ProcessData(void)
 	    varcpy[14] = UTC2Sec(var[14]);
 	    varcpy[15] = tmnow->tm_yday+1; // start with Jan 1 is JD 1. 
 	    if (fNtuple) fNtuple->Fill(varcpy);
+
+	    W = MTotal/Norm;
+	    if ((T>Low1) && (T<(Low1+Norm)))
+	    {
+		Sum[0] = Sum[0] + W;
+	    }
+	    if ((T>Low2) && (T<(Low2+Norm)))
+	    {
+		Sum[1] = Sum[1] + W;
+	    }
+	    f2D->Fill(Day, T, W);
 	}
     }
+    cout << "File Number: " << count
+	 << " 1600 hrs: " << Sum[0]
+	 << " 1700 hrs: " << Sum[1]
+	 << endl;
 
     SET_DEBUG_STACK;
     return true;
@@ -429,7 +466,6 @@ bool Analysis::OpenInputFile(const char *Filename)
 {
     SET_DEBUG_STACK;
     CLogger *pLogger = CLogger::GetThis();
-    SET_DEBUG_STACK;
 
     /*
      * open in read only mode. 
@@ -448,6 +484,50 @@ bool Analysis::OpenInputFile(const char *Filename)
 
     //cout << *f5InputFile ;
     return true;
+}
+/**
+ ******************************************************************
+ *
+ * Function Name : CountFiles
+ *
+ * Description : Count the number of files on the input side
+ *
+ * Inputs : none
+ *
+ * Returns : NONE
+ *
+ * Error Conditions : NONE
+ * 
+ * Unit Tested on:  
+ *
+ * Unit Tested by: CBL
+ *
+ *
+ *******************************************************************
+ */
+uint32_t Analysis::CountFiles(void)
+{
+    SET_DEBUG_STACK;
+    CLogger *pLogger = CLogger::GetThis();
+    uint32_t count   = 0;
+    char     Filename[256];
+    bool     Run     = true;
+    
+    /*
+     * file is already open, read all the lines and increment the 
+     * count then return it. 
+     */
+    while(Run)
+    {
+	fInputFileList->getline( Filename, sizeof(Filename),'\n');
+	Run = (strlen(Filename)>0);
+	if (Run) count++;
+    }
+    // Rewind the file. 
+    fInputFileList->seekg(0);
+    pLogger->LogTime("Number input files %d\n", count);
+    SET_DEBUG_STACK;
+    return count;
 }
 /**
  ******************************************************************
