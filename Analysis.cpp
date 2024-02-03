@@ -249,7 +249,7 @@ bool Analysis::OpenOutputFile(const char *Filename)
 bool Analysis::CreateNTuple(void)
 {
     SET_DEBUG_STACK;
-    const char *Names="Time:AX:AY:AZ:GX:GY:GZ:MX:MY:MZ:Temp:Lat:Lon:Z:UTC";
+    const char *Names="Time:AX:AY:AZ:GX:GY:GZ:MX:MY:MZ:Temp:Lat:Lon:Z:UTC:JD";
     fNtuple = new TNtupleD("IMUTuple", "Raspberry Pi DA", Names);
 
     SET_DEBUG_STACK;
@@ -362,16 +362,18 @@ bool Analysis::ProcessData(void)
 {
     SET_DEBUG_STACK;
     const double   *var;        // get a row at a time from H5 file
-    double   varcpy[15];
+    double   varcpy[16];
     double         MTotal, FVal;
     double         T, X, Y, Z;
+    struct tm      *tmnow;
+    time_t         sec;
 
     // number of entries in the file. 
     size_t N = f5InputFile->NEntries();
     cout << "Processing: " << N << " Entries." << endl;
 
-    //uint32_t iTime = f5InputFile->IndexFromName("Time");
-    uint32_t iUTC  = f5InputFile->IndexFromName("UTC");
+    time_t   iTime = f5InputFile->IndexFromName("Time");
+    int32_t  iUTC  = f5InputFile->IndexFromName("UTC");
     uint32_t iMx   = f5InputFile->IndexFromName("Mx");
     uint32_t iMy   = f5InputFile->IndexFromName("My");
     uint32_t iMz   = f5InputFile->IndexFromName("Mz");
@@ -381,6 +383,8 @@ bool Analysis::ProcessData(void)
 	if(f5InputFile->DatasetReadRow(i))
 	{
 	    var = f5InputFile->RowData();
+	    sec = (time_t) var[iTime];
+	    tmnow = gmtime(&sec);
 	    T = UTC2Sec(var[iUTC]);
 	    X = var[iMx];
 	    Y = var[iMy];
@@ -392,6 +396,7 @@ bool Analysis::ProcessData(void)
 	    memcpy(varcpy, var, 15*sizeof(double));
 	    // convert UTC HHMMSS.ss into sssss
 	    varcpy[14] = UTC2Sec(var[14]);
+	    varcpy[15] = tmnow->tm_yday+1; // start with Jan 1 is JD 1. 
 	    if (fNtuple) fNtuple->Fill(varcpy);
 	}
     }
