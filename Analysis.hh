@@ -96,6 +96,7 @@ private:
     TLegend     *fLegend;   
     TNtupleD    *fNtuple;   
     TH2D        *f2D;         // Binned 2 D data. 
+    uint32_t    fExpected;    // Number of files expected. 
 
     /// File management
     ifstream     *fInputFileList;

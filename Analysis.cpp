@@ -91,6 +91,7 @@ Analysis::Analysis(const char* ConfigFile) : CObject()
     fGraph         = NULL;
     fProfile       = NULL;
     f2D            = NULL;
+    fExpected      = 0;
 
     if(!ConfigFile)
     {
@@ -258,10 +259,10 @@ bool Analysis::CreateNTuple(void)
      * Day and time, fill with the absmag of the value per bin
      * and then normalize. 
      */
-    uint32_t count = CountFiles();
+    fExpected = CountFiles();
     f2D = new TH2D("ABSMAG2D","Day by Day ABSMAG", 
-		   count, 0.0, (Double_t) count-1,   // Day is X
-		   kNTimeBin, 0.0, (double) kSecPerDay);         // Time is Y
+		   fExpected, 0.0, (double) fExpected, // Day is X
+		   kNTimeBin, 0.0, (double) kSecPerDay);   // Time is Y
 
     SET_DEBUG_STACK;
     return true;
@@ -290,10 +291,10 @@ bool Analysis::CreateNTuple(void)
 void Analysis::Do(void)
 {
     SET_DEBUG_STACK;
+    CLogger *pLogger = CLogger::GetThis();
     char     Filename[256];
     TString  Name, Result, ProfName;        // stripped down name
     char     tmp[32];
-    uint32_t count = 0;                     // file count
     Ssiz_t   n1, n2;
 
     fRun = true;
@@ -308,10 +309,10 @@ void Analysis::Do(void)
     fLegend = new TLegend(0.1, 0.1, 0.5, 0.4);
 
     // Loop over input file name until there are no more. 
-    while(fRun)
+    for (UInt_t i=0; i<fExpected; i++)
     {
 	fInputFileList->getline( Filename, sizeof(Filename),'\n');
-	cout << "Input file name: " << Filename << " count: " << count << endl;
+	cout << "Input: " << Filename << ", count: " << i << endl;
 	fRun = (strlen(Filename)>0);
 	if (fRun)
 	{
@@ -319,16 +320,18 @@ void Analysis::Do(void)
 	    n1     = Name.First("202");
 	    n2     = Name.Last('_');
 	    Result = Name(n1,n2-n1);
-	    snprintf(tmp, sizeof(tmp), "IMU%d",count);
+	    snprintf(tmp, sizeof(tmp), "IMU%d",i);
 	    ProfName = tmp;
 	    fProfile->SetTitle(Result);
-	    cout << "RESULT: " << Result << endl;
 
 	    // Process. 
 	    if(OpenInputFile(Filename))
 	    {
+		/* Log that this was done in the local text log file. */
+		pLogger->LogTime("File - number: %d, name: %s\n", i, Filename);
+
 		// Loop over data, process it and then close the input file. 
-		ProcessData(count);
+		ProcessData(i);
 		delete f5InputFile;
 		f5InputFile = NULL;
 		if (ftmg)
@@ -338,13 +341,12 @@ void Analysis::Do(void)
 		    fLegend->AddEntry(fGraph, Result);
 		    // Create a new graph
 		    fGraph = new TGraph();
-		    fGraph->SetMarkerColor(count);
-		    fGraph->SetLineColor(count);
+		    fGraph->SetMarkerColor(i);
+		    fGraph->SetLineColor(i);
 		}
 		fProfile->Write(ProfName);
 		fProfile->Reset();
 	    }
-	    count++;
 	}
     }
     SET_DEBUG_STACK;
@@ -372,6 +374,7 @@ void Analysis::Do(void)
 bool Analysis::ProcessData(uint32_t count)
 {
     SET_DEBUG_STACK;
+    CLogger *pLogger = CLogger::GetThis();
     const double   *var;        // get a row at a time from H5 file
     double         varcpy[16];
     double         MTotal, FVal;
@@ -382,23 +385,16 @@ bool Analysis::ProcessData(uint32_t count)
     double         Norm = ((double)kSecPerDay)/((double) kNTimeBin);
     double         Day  = (double) count;
     double         W;   // Actual bin value
-    const double   Low1 = 16.0*kSecPerDay;
-    const double   Low2 = 17.0*kSecPerDay;
-
-
-    // Sample at 2 points for printout/debug
-    double         Sum[2];
 
     // number of entries in the file. 
     size_t N = f5InputFile->NEntries();
-    cout << "Processing: " << N << " Entries. Day: " << Day << endl;
+    pLogger->LogTime("Processing: %d Entries. Day: %d\n", N, count);
 
     time_t   iTime = f5InputFile->IndexFromName("Time");
     int32_t  iUTC  = f5InputFile->IndexFromName("UTC");
     uint32_t iMx   = f5InputFile->IndexFromName("Mx");
     uint32_t iMy   = f5InputFile->IndexFromName("My");
     uint32_t iMz   = f5InputFile->IndexFromName("Mz");
-    memset (Sum, 0, 2*sizeof(double));
 
     for (size_t i=0 ;i<N; i++)
     {
@@ -422,21 +418,9 @@ bool Analysis::ProcessData(uint32_t count)
 	    if (fNtuple) fNtuple->Fill(varcpy);
 
 	    W = MTotal/Norm;
-	    if ((T>Low1) && (T<(Low1+Norm)))
-	    {
-		Sum[0] = Sum[0] + W;
-	    }
-	    if ((T>Low2) && (T<(Low2+Norm)))
-	    {
-		Sum[1] = Sum[1] + W;
-	    }
 	    f2D->Fill(Day, T, W);
 	}
     }
-    cout << "File Number: " << count
-	 << " 1600 hrs: " << Sum[0]
-	 << " 1700 hrs: " << Sum[1]
-	 << endl;
 
     SET_DEBUG_STACK;
     return true;
@@ -449,11 +433,11 @@ bool Analysis::ProcessData(uint32_t count)
  *
  * Description : Open and manage the HDF5 Input file
  *
- * Inputs : none
+ * Inputs : Filename to open
  *
- * Returns : NONE
+ * Returns : true on success
  *
- * Error Conditions : NONE
+ * Error Conditions : File doesn't exist
  * 
  * Unit Tested on:  
  *
@@ -478,11 +462,6 @@ bool Analysis::OpenInputFile(const char *Filename)
 	f5InputFile = NULL;
 	return false;
     }
-
-    /* Log that this was done in the local text log file. */
-    pLogger->LogTime("Input file name %s\n", Filename);
-
-    //cout << *f5InputFile ;
     return true;
 }
 /**
@@ -525,7 +504,7 @@ uint32_t Analysis::CountFiles(void)
     }
     // Rewind the file. 
     fInputFileList->seekg(0);
-    pLogger->LogTime("Number input files %d\n", count);
+    pLogger->LogTime("Number input files expected: %d\n", count);
     SET_DEBUG_STACK;
     return count;
 }
