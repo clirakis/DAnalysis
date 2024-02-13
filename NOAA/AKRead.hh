@@ -21,36 +21,13 @@
  *
  *******************************************************************
  */
-#ifndef __MAINMODULE_hh_
-#define __MAINMODULE_hh_
+#ifndef __AKREAD_hh_
+#define __AKREAD_hh_
 #  include <stdint.h>
 #  include <fstream>
 #  include "CObject.hh" // Base class with all kinds of intermediate
-
-class AKRecord
-{
-public:
-    AKRecord(void);
-    bool Fill(const string &val);
-    void Clear(void);
-
-    string  fName;
-    uint8_t fYear;
-    uint8_t fMonth;
-    uint8_t fDay;
-
-    // Geomagnetic Dipole
-    int32_t fLat;      // minus is South
-    int32_t fLon;      // minus is West
-
-    float  fA_Index;
-    float  fK_Index[8];
-
-    inline void FillDate(uint8_t Year, uint8_t Mon, uint8_t Day) 
-	{fYear = Year; fMonth = Mon; fDay = Day;};
-
-    friend ostream& operator<<(ostream &output, AKRecord &r);
-};
+#  include "AKRecord.hh"
+class Plotting;
 
 class AKRead : public CObject
 {
@@ -66,7 +43,7 @@ public:
     AKRead(const char *Filename, const char *ConfigFile);
 
     /**
-     * Destructor for SK8. 
+     * Destructor for AKRead
      */
     ~AKRead(void);
 
@@ -102,6 +79,7 @@ private:
     uint8_t  fMonth;
     uint8_t  fDay;
     AKRecord fAKR;
+    Plotting *fPlotting;
 
     /*! 
      * Configuration file name. 
@@ -109,6 +87,7 @@ private:
     char   *fConfigFileName;
 
     std::ifstream *InData;
+
 
     /* Private functions. ==============================  */
 
