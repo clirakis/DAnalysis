@@ -42,8 +42,6 @@ static unsigned int VerboseLevel = 0;
 /** Pointer to the logger structure. */
 static CLogger   *logger;
 
-static char *Filename = NULL;
-
 /**
  ******************************************************************
  *
@@ -66,7 +64,6 @@ static void Help(void)
     cout << "* Conversion of AK data into something plotable.*" << endl;
     cout << "* Built on "<< __DATE__ << " " << __TIME__ << "*" << endl;
     cout << "* Available options are :                  *" << endl;
-    cout << "*     -f Filename                          *" << endl;
     cout << "*                                          *" << endl;
     cout << "********************************************" << endl;
 }
@@ -102,7 +99,6 @@ ProcessCommandLineArgs(int argc, char **argv)
         switch(option)
         {
         case 'f':
-	    Filename = strdup(optarg);
             break;
         case 'h':
         case 'H':
@@ -184,7 +180,7 @@ int main(int argc, char **argv)
     ProcessCommandLineArgs(argc, argv);
     if (Initialize())
     {
-	AKRead *pModule = new AKRead(Filename, "AKRead.cfg");
+	AKRead *pModule = new AKRead("AKRead.cfg");
 
 	if (pModule->Error() == 0)
 	{

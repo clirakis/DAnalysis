@@ -16,17 +16,17 @@ TARGET = ReadAK
 #
 # Compile time resolution.
 #
-INCLUDE = -I$(DRIVE)/common/utility
-LIBS = -lutility 
+INCLUDE = -I$(DRIVE)/common/utility -I$(ROOT_INC)
+LIBS = -lutility $(ROOT_LIBS)
 LIBS += -lconfig++
 
 
 # Rules to make the object files depend on the sources.
 SRC     = 
-SRCCPP  = main.cpp AKRead.cpp Plotting.cpp UserSignals.cpp
+SRCCPP  = main.cpp AKRead.cpp AKRecord.cpp Plotting.cpp UserSignals.cpp
 SRCS    = $(SRC) $(SRCCPP)
 
-HEADERS = AKRead.hh Plotting.hh UserSignals.hh Version.hh
+HEADERS = AKRead.hh AKRecord.hh Plotting.hh UserSignals.hh Version.hh
 
 # When we build all, what do we build?
 all:      $(TARGET)

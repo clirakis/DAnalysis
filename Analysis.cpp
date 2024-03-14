@@ -11,11 +11,14 @@
  *
  * Change Descriptions : 
  * 28-Jan-24   CBL Might as well create the NTuple as well. 
+ * 13-Feb-24       K Index ntuple
+ * 14-Mar-24       Error in Day index. 
  *
  * Classification : Unclassified
  *
  * References : 
- *
+ * K index
+ * https://www.swpc.noaa.gov/products/station-k-and-indices#:~:text=The%20final%20K%2Dindices%20are,determine%20the%20total%20maximum%20fluctuation.
  *
  *******************************************************************
  */  
@@ -48,6 +51,7 @@ using namespace libconfig;
 #include "UTC2Sec.hh"
 #include "debug.h"
 #include "SFilter.hh"
+#include "YearDay.hh"
 
 Analysis* Analysis::fAnalysis = NULL;
 
@@ -91,6 +95,8 @@ Analysis::Analysis(const char* ConfigFile) : CObject()
     fGraph         = NULL;
     fProfile       = NULL;
     f2D            = NULL;
+    f2DZ           = NULL;
+    f2DK           = NULL;
     fExpected      = 0;
 
     if(!ConfigFile)
@@ -253,17 +259,31 @@ bool Analysis::CreateNTuple(void)
     const char *Names="Time:AX:AY:AZ:GX:GY:GZ:MX:MY:MZ:Temp:Lat:Lon:Z:UTC:JD";
     fNtuple = new TNtupleD("IMUTuple", "Raspberry Pi DA", Names);
 
+    Int_t    IMax = 80;
+    Double_t XMax = (Double_t) IMax;
+
     /*
      *  Create 2D plot as well. 
      * First count number of files. Axes will be 
      * Day and time, fill with the absmag of the value per bin
      * and then normalize. 
+     *
+     * fExpected was a good way to specify the limits on X when
+     * we were plotting against file number, but when plotting against 
+     * real day this does not work. Try something different. 
      */
     fExpected = CountFiles();
     f2D = new TH2D("ABSMAG2D","Day by Day ABSMAG", 
-		   fExpected, 0.0, (double) fExpected, // Day is X
-		   kNTimeBin, 0.0, (double) kSecPerDay);   // Time is Y
+		   IMax, 0.0, XMax,    // Day is X
+		   kNTimeBin, 0.0, (double) kSecPerDay);  // Time is Y
 
+    f2DZ = new TH2D("Z2D","Day by Day Z high res", 
+		    IMax, 0.0, XMax,    // Day is X
+		    kNTimeBin, 0.0, (double) kSecPerDay);  // Time is Y
+
+    f2DK = new TH2D("KINDEX", "K index day by day", 
+		   IMax, 0.0, XMax,    // Day is X
+		    8, 0.0,  (double) kSecPerDay);
     SET_DEBUG_STACK;
     return true;
 }
@@ -374,35 +394,51 @@ void Analysis::Do(void)
 bool Analysis::ProcessData(uint32_t count)
 {
     SET_DEBUG_STACK;
+    const double KWeight = 3.0 * 3600.0;    // 1 sec per interval, 3 hour bins
+    const double KStation = 400.0/4900.0/2.0; 
     CLogger *pLogger = CLogger::GetThis();
     const double   *var;        // get a row at a time from H5 file
     double         varcpy[16];
     double         MTotal, FVal;
     double         T, X, Y, Z;
-    struct tm      *tmnow;
-    time_t         sec;
+    //struct tm      *tmnow;
+    //time_t         sec;
     // This assumes a 1/sec sample rate. 
     double         Norm = ((double)kSecPerDay)/((double) kNTimeBin);
-    double         Day  = (double) count;
+    //double         Day  = (double) count;
     double         W;   // Actual bin value
+    double         KIndex;
+    
+
 
     // number of entries in the file. 
     size_t N = f5InputFile->NEntries();
-    pLogger->LogTime("Processing: %d Entries. Day: %d\n", N, count);
+    pLogger->LogTime("Processing: %d Entries. count: %d\n", N, count);
 
-    time_t   iTime = f5InputFile->IndexFromName("Time");
+    //time_t   iTime = f5InputFile->IndexFromName("Time");
     int32_t  iUTC  = f5InputFile->IndexFromName("UTC");
     uint32_t iMx   = f5InputFile->IndexFromName("Mx");
     uint32_t iMy   = f5InputFile->IndexFromName("My");
     uint32_t iMz   = f5InputFile->IndexFromName("Mz");
+
+
+    /*
+     * Get the date information from the header file. 
+     * This will be in the form of something like:
+     * "2024-02-12 02:43:44"
+     */
+    const char *Date = f5InputFile->HeaderInfo( H5Logger::kDATE);
+    struct tm *rv    = f5InputFile->H5ParseTime((const char *)Date);
+    double Day       = (Double_t)rv->tm_yday;
+    pLogger->LogTime("Date: %s, Day in Year: %f\n", Date, Day);
 
     for (size_t i=0 ;i<N; i++)
     {
 	if(f5InputFile->DatasetReadRow(i))
 	{
 	    var = f5InputFile->RowData();
-	    sec = (time_t) var[iTime];
-	    tmnow = gmtime(&sec);
+	    //sec = (time_t) var[iTime];
+	    //tmnow = gmtime(&sec);
 	    T = UTC2Sec(var[iUTC]);
 	    X = var[iMx];
 	    Y = var[iMy];
@@ -414,11 +450,33 @@ bool Analysis::ProcessData(uint32_t count)
 	    memcpy(varcpy, var, 15*sizeof(double));
 	    // convert UTC HHMMSS.ss into sssss
 	    varcpy[14] = UTC2Sec(var[14]);
-	    varcpy[15] = tmnow->tm_yday+1; // start with Jan 1 is JD 1. 
+	    varcpy[15] = Day;   // start with Jan 1 is JD 1. 
 	    if (fNtuple) fNtuple->Fill(varcpy);
 
 	    W = MTotal/Norm;
-	    f2D->Fill(Day, T, W);
+	    /* 
+	     * Updating from day based on file count
+	     * to Day of year. 
+	     */
+	    f2D->Fill (Day, T, W);
+	    f2DZ->Fill(Day, T, Z/Norm);
+	    /*
+	     *  Not worrying about the K number right now. 
+	     * should be something like this 
+	     * 
+	     * K  0  1  2   3   4   5   6    7    8    9
+	     * ak 0  3  7  15  27  48  80  140  240  400 (nT)
+	     *
+	     * Factor for lowest value of nT measured. 
+	     * Full scale is: ±4900 µT over 16 bits
+	     * 74.8nT. 
+	     * Oh yeah and is only Z component. 
+	     * Think it goes like this, 9 is 400nT. 
+	     * KStation = 400.0/4900.0/2.0 
+	     *
+	     */
+	    KIndex = Z/KWeight * KStation;
+	    f2DK->Fill(Day, T, KIndex);
 	}
     }
 

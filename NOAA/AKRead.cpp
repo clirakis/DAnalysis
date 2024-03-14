@@ -63,7 +63,7 @@ AKRead* AKRead::fMainModule;
  *
  *******************************************************************
  */
-AKRead::AKRead(const char *Filename, const char* ConfigFile) : CObject()
+AKRead::AKRead(const char* ConfigFile) : CObject()
 {
     CLogger *Logger = CLogger::GetThis();
 
@@ -73,6 +73,10 @@ AKRead::AKRead(const char *Filename, const char* ConfigFile) : CObject()
     SetError(); // No error.
 
     fRun = true;
+    fInputFileName = strdup("Default.txt");
+    fInputFileList = NULL;
+    fPlotting      = NULL;
+    fNDays         = 1;
 
     /* 
      * Set defaults for configuration file. 
@@ -91,18 +95,6 @@ AKRead::AKRead(const char *Filename, const char* ConfigFile) : CObject()
     }
 
     /* USER POST CONFIGURATION STUFF. */
-
-    InData = new std::ifstream(Filename);
-    // is_open?
-    if (InData->fail())
-    {
-	Logger->LogTime("Could not open input file: %s\n",  Filename);
-	SetError(-1, __LINE__);
-	InData = NULL;
-	return;
-    }
-
-    fPlotting = new Plotting();
 
     Logger->Log("# AKRead constructed.\n");
 
@@ -145,8 +137,13 @@ AKRead::~AKRead(void)
     }
     free(fConfigFileName);
 
+    if(fInputFileList) 
+    {
+	fInputFileList->close();
+	delete fInputFileList;
+    }
+
     /* Clean up */
-    delete InData;
 
     // Make sure all file streams are closed
     Logger->Log("# AKRead closed.\n");
@@ -274,7 +271,6 @@ bool AKRead::ProcessLine(const char *Line, const char *Location)
     SET_DEBUG_STACK;
     return rc;
 }
-
 /**
  ******************************************************************
  *
@@ -297,13 +293,60 @@ bool AKRead::ProcessLine(const char *Line, const char *Location)
  */
 void AKRead::Do(void)
 {
+    uint32_t count = 0;
+    char Filename[256];
+
+    while (fRun)
+    {
+	fInputFileList->getline( Filename, sizeof(Filename),'\n');
+	cout << "Input: " << Filename << ", count: " << count << endl;
+	fRun = (strlen(Filename)>0);
+	if (fRun)
+	{
+	    ProcessFile(Filename);
+	    count++;
+	}
+    }
+}
+/**
+ ******************************************************************
+ *
+ * Function Name : ProcessFile
+ *
+ * Description :
+ *
+ * Inputs :
+ *
+ * Returns :
+ *
+ * Error Conditions :
+ * 
+ * Unit Tested on: 
+ *
+ * Unit Tested by: CBL
+ *
+ *
+ *******************************************************************
+ */
+bool AKRead::ProcessFile(const char *Filename)
+{
     SET_DEBUG_STACK;
+    CLogger *Logger = CLogger::GetThis();
     char Line[256];
     int  count = 0;
 
-    while (!InData->eof() && fRun)
+    std::ifstream InData(Filename);
+    // is_open?
+    if (InData.fail())
     {
-	InData->getline(Line, sizeof(Line));
+	Logger->LogTime("Could not open input file: %s\n",  Filename);
+	SetError(-1, __LINE__);
+	return false;
+    }
+
+    while (!InData.eof())
+    {
+	InData.getline(Line, sizeof(Line));
 	if (ProcessLine(Line,"Fredericksburg"))
 	{
 	    count++;
@@ -311,8 +354,10 @@ void AKRead::Do(void)
 	    fPlotting->Fill(fAKR);
 	}
     }
+    InData.close();
     std::cout << "Processed: " << count << " lines. " << std::endl;
     SET_DEBUG_STACK;
+    return true;
 }
 
 /**
@@ -338,9 +383,10 @@ void AKRead::Do(void)
 bool AKRead::ReadConfiguration(void)
 {
     SET_DEBUG_STACK;
-    CLogger *Logger = CLogger::GetThis();
+    CLogger  *Logger = CLogger::GetThis();
     ClearError(__LINE__);
-    Config *pCFG = new Config();
+    Config   *pCFG = new Config();
+    string   InputFile;
 
     /*
      * Open the configuragtion file. 
@@ -376,8 +422,16 @@ bool AKRead::ReadConfiguration(void)
 	 * index into group AKRead
 	 */
 	const Setting &MM = root["AKRead"];
-	MM.lookupValue("Debug",     Debug);
+	MM.lookupValue("Debug"    ,     Debug);
+	MM.lookupValue("InputFile", InputFile);
+	MM.lookupValue("Days"     , fNDays);
+
 	SetDebug(Debug);
+	if (InputFile.length()>0)
+	{
+	    fInputFileName = InputFile;
+	}
+
     }
     catch(const SettingNotFoundException &nfex)
     {
@@ -386,6 +440,21 @@ bool AKRead::ReadConfiguration(void)
 
     delete pCFG;
     pCFG = 0;
+
+    // open the input filename. 
+    fInputFileList = new ifstream(fInputFileName);
+    if(fInputFileList->fail())
+    {
+	Logger->Log("# Failed to open input file list: %s\n", 
+		    fInputFileName.data());
+	return false;
+    }
+    else
+    {
+	Logger->Log("# Input file list: %s\n", fInputFileName.data());
+    }
+    fPlotting = new Plotting(fNDays);
+
     SET_DEBUG_STACK;
     return true;
 }
@@ -422,8 +491,10 @@ bool AKRead::WriteConfiguration(void)
     // USER TO FILL IN
     // Add some settings to the configuration.
     Setting &MM = root.add("AKRead", Setting::TypeGroup);
-    MM.add("Debug",     Setting::TypeInt)     = 0;
-    MM.add("Logging",   Setting::TypeBoolean)     = true;
+    MM.add("Debug"    , Setting::TypeInt)     = 0;
+    MM.add("Logging"  , Setting::TypeBoolean) = true;
+    MM.add("InputFile", Setting::TypeString)  = fInputFileName;
+    MM.add("Days"     , Setting::TypeInt)     = fNDays;
 
     // Write out the new configuration.
     try

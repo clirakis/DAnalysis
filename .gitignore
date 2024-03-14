@@ -41,3 +41,7 @@
 *.png
 *.jpg
 *.gif
+# very specific to this directory. 
+*.txt
+Analysis.cfg
+AKRead.cfg

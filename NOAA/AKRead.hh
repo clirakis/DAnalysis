@@ -40,7 +40,7 @@ public:
      * Constructor the lassen SK8 subsystem.
      * All inputs are in configuration file. 
      */
-    AKRead(const char *Filename, const char *ConfigFile);
+    AKRead(const char *ConfigFile);
 
     /**
      * Destructor for AKRead
@@ -78,19 +78,20 @@ private:
     uint8_t  fYear;
     uint8_t  fMonth;
     uint8_t  fDay;
+    int32_t  fNDays; 
     AKRecord fAKR;
     Plotting *fPlotting;
 
     /*! 
      * Configuration file name. 
      */
-    char   *fConfigFileName;
-
-    std::ifstream *InData;
-
+    char          *fConfigFileName;
+    std::ifstream *fInputFileList;
+    string        fInputFileName;
 
     /* Private functions. ==============================  */
 
+    bool ProcessFile(const char *Filename);
     bool ProcessLine(const char *Line, const char *Location);
     void ProcessDate(const string &Line);
 

@@ -17,6 +17,7 @@
  *               dataset day. This is on a switch. 
  *
  * 28-Jan-24     Create Ntuple too
+ * 13-Feb-24     Add in K-index style 2D histo.
  * 
  * Classification : Unclassified
  *
@@ -95,7 +96,9 @@ private:
     TMultiGraph *ftmg;        // if this is non-null, use multiple graphs
     TLegend     *fLegend;   
     TNtupleD    *fNtuple;   
-    TH2D        *f2D;         // Binned 2 D data. 
+    TH2D        *f2D;         // Binned 2 D data - high res bin
+    TH2D        *f2DZ;        // Binned 2 D data - high res bin, Z only
+    TH2D        *f2DK;        // binned on 3 hour intervals. K_Index
     uint32_t    fExpected;    // Number of files expected. 
 
     /// File management
