@@ -13,9 +13,14 @@
      * MY {-51:-52}
      * MZ {67.2:68.2}
      * MAG {85.7:86.4}
+     *
+     * Nbins x
+     * xbin size
+     * Ylow
+     * Yhigh
      */
     TProfile *prof = new TProfile("ABSMAG", "Absolute Magnitude", 
-				  215, 0.0, 86000.0, 80.0, 90.0);
+				  235, 0.0, 86000.0, 80.0, 120.0);
     /* Make a profile plot. */
     //IMUTuple->Draw("sqrt(MX*MX+MY*MY+MZ*MZ):UTC","", "PROF");
     IMUTuple->Draw("sqrt(MX*MX+MY*MY+MZ*MZ):UTC>>ABSMAG");

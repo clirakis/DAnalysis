@@ -5,7 +5,7 @@
  *
  * Author/Date : C.B. Lirakis / 05-Mar-19
  *
- * Description : Lassen control entry points. 
+ * Description : Analysis for magnetometer data. 
  *
  * Restrictions/Limitations : none
  *
@@ -98,6 +98,7 @@ Analysis::Analysis(const char* ConfigFile) : CObject()
     f2DZ           = NULL;
     f2DK           = NULL;
     fExpected      = 0;
+    fNBins         = 10;       // Number of bins or days
 
     if(!ConfigFile)
     {
@@ -256,11 +257,10 @@ bool Analysis::OpenOutputFile(const char *Filename)
 bool Analysis::CreateNTuple(void)
 {
     SET_DEBUG_STACK;
-    const char *Names="Time:AX:AY:AZ:GX:GY:GZ:MX:MY:MZ:Temp:Lat:Lon:Z:UTC:JD";
+    const char *Names="Time:AX:AY:AZ:GX:GY:GZ:MX:MY:MZ:Temp:Lat:Lon:Z:UTC:JD:DSEC";
     fNtuple = new TNtupleD("IMUTuple", "Raspberry Pi DA", Names);
 
-    Int_t    IMax = 80;
-    Double_t XMax = (Double_t) IMax;
+    Double_t XMax = (Double_t) fNBins;
 
     /*
      *  Create 2D plot as well. 
@@ -274,15 +274,15 @@ bool Analysis::CreateNTuple(void)
      */
     fExpected = CountFiles();
     f2D = new TH2D("ABSMAG2D","Day by Day ABSMAG", 
-		   IMax, 0.0, XMax,    // Day is X
+		   fNBins, 0.0, XMax,    // Day is X
 		   kNTimeBin, 0.0, (double) kSecPerDay);  // Time is Y
 
     f2DZ = new TH2D("Z2D","Day by Day Z high res", 
-		    IMax, 0.0, XMax,    // Day is X
+		    fNBins, 0.0, XMax,    // Day is X
 		    kNTimeBin, 0.0, (double) kSecPerDay);  // Time is Y
 
     f2DK = new TH2D("KINDEX", "K index day by day", 
-		   IMax, 0.0, XMax,    // Day is X
+		   fNBins, 0.0, XMax,    // Day is X
 		    8, 0.0,  (double) kSecPerDay);
     SET_DEBUG_STACK;
     return true;
@@ -331,6 +331,8 @@ void Analysis::Do(void)
     // Loop over input file name until there are no more. 
     for (UInt_t i=0; i<fExpected; i++)
     {
+	memset( Filename, 0, sizeof(Filename));
+
 	fInputFileList->getline( Filename, sizeof(Filename),'\n');
 	cout << "Input: " << Filename << ", count: " << i << endl;
 	fRun = (strlen(Filename)>0);
@@ -561,7 +563,9 @@ uint32_t Analysis::CountFiles(void)
 	if (Run) count++;
     }
     // Rewind the file. 
-    fInputFileList->seekg(0);
+    fInputFileList->clear();  // new! Should have been true all along. 
+    fInputFileList->seekg(ios_base::beg);
+    cout << "position: " << fInputFileList->tellg() << endl;
     pLogger->LogTime("Number input files expected: %d\n", count);
     SET_DEBUG_STACK;
     return count;
@@ -636,6 +640,7 @@ bool Analysis::ReadConfiguration(void)
 	MM.lookupValue("SampleRate"    , SampleRate);
 	MM.lookupValue("OutputFile"    , fOutputFileName);
 	MM.lookupValue("Multigraph"    , multi);
+	MM.lookupValue("NBins"         , fNBins);
 
 	SetDebug(Debug);
 	if (InputFile.length()>0)
@@ -734,6 +739,7 @@ bool Analysis::WriteConfiguration(void)
     MM.add("SampleFrequency", Setting::TypeFloat)  = SampleRate;
     MM.add("OutputFile"     , Setting::TypeString) = fOutputFileName;
     MM.add("Multigraph"     , Setting::TypeBoolean)= (ftmg != NULL);
+    MM.add("NBins"          , Setting::TypeInt)    = fNBins;
 
     // Write out the new configuration.
     try

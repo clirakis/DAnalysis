@@ -100,6 +100,7 @@ private:
     TH2D        *f2DZ;        // Binned 2 D data - high res bin, Z only
     TH2D        *f2DK;        // binned on 3 hour intervals. K_Index
     uint32_t    fExpected;    // Number of files expected. 
+    int32_t     fNBins;
 
     /// File management
     ifstream     *fInputFileList;

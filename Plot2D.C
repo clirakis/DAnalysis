@@ -14,20 +14,23 @@
     Double_t X_Upper = 365.0;
     
 
-#if 1
+#if 0
     // Upper and lower limits for 217 Locust. 
-    Z_Upper = 85.5;
+    // one out of the park day around day 97 is 138 max
+    // Usual is 86
+    // and the very low ones are at 68
+    Z_Upper = 68.0;
     //Z_Lower = 82.5;
-    Z_Lower = 81.0;
-    X_Lower =  0.0;
-    X_Upper = 54.0;
+    Z_Lower = 64.0;
+    X_Lower = 300.0;
+    X_Upper = 317.0;
 #else
     // Upper and lower limits for 62 Kane.
     // Day 63 goes up to 140
-    Z_Upper =  97.0;
-    Z_Lower =  95.2;
-    X_Lower =  54.0;
-    X_Upper =  56.0;
+    Z_Upper =  120.0;
+    Z_Lower =  65.0;
+    X_Lower =  260.0;
+    X_Upper =  317.0;
 #endif
 
     // Which to plot?
@@ -57,7 +60,7 @@
 	ABSMAG2D->SetMaximum(Z_Upper);
 
 	// Some reason this doesn't work as expected. 
-	//ABSMAG2D->GetXaxis()->SetLimits(X_Lower, X_Upper);
+	ABSMAG2D->GetXaxis()->SetRangeUser(X_Lower, X_Upper);
 	break;
     case 1:   // High res 2D but Z only. 
 	Z2D->Draw("SURF2");

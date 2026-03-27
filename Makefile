@@ -38,5 +38,5 @@ include $(DRIVE)/common/makefiles/makefile.inc
 
 
 #dependencies
-include make.depend 
+include .depends
 # DO NOT DELETE
